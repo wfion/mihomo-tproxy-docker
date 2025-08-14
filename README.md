@@ -1,3 +1,5 @@
+[![Docker](https://github.com/wfion/mihomo-tproxy-docker/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/wfion/mihomo-tproxy-docker/actions/workflows/docker-publish.yml)
+
 # Mihomo Transparent Proxy Docker
 
 A simple Mihomo (formerly known as Clash.Meta) transparent proxy Docker image.

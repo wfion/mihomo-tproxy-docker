@@ -1,157 +1,16 @@
-#!/bin/sh
-# Reference documentation:
-# https://www.kernel.org/doc/Documentation/networking/tproxy.txt
-# https://guide.v2fly.org/app/tproxy.html
+#!/bin/bash
+# 使用 iptables 版 TProxy 规则
 
-# configs
 MIHOMO_PORT=7893
 MIHOMO_DNS_PORT=1053
-MIHOMO_MARK=0xff
-TPROXY_MARK=0x1
+TPROXY_MARK=1
 ROUTE_TABLE=100
 
 CN_IP_FILE="/mihomo/config/cn_cidr.txt"
 
-NFT_DIR="/mihomo/nftables"
-MAIN_NFT="$NFT_DIR/clash.nft"
-PRIVATE_NFT="$NFT_DIR/private.nft"
-CHNROUTE_NFT="$NFT_DIR/chnroute.nft"
-
-DEFAULT_IFACE=$(ip route | awk '/^default/ {print $5; exit}')
-[ -z "$DEFAULT_IFACE" ] && DEFAULT_IFACE="eth0"
-
 RESERVED_IPS="0.0.0.0/8 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4"
 
-setup_nftables() {
-    nft flush ruleset
-    set -e
-
-    # Generate nftables rules
-    mkdir -p "$NFT_DIR"
-
-    # private.nft
-    cat > "$PRIVATE_NFT" <<EOF
-table ip clash {
-  set reserved_ips {
-    type ipv4_addr;
-    flags interval;
-    elements = {
-EOF
-
-    for ip in $RESERVED_IPS; do
-        echo "      $ip," >> "$PRIVATE_NFT"
-    done
-    sed -i '$ s/,$//' "$PRIVATE_NFT"
-
-    cat >> "$PRIVATE_NFT" <<EOF
-    }
-  }
-}
-EOF
-
-    # chnroute.nft
-    if [ "$BYPASS_CN" = "true" ] && [ -f "$CN_IP_FILE" ]; then
-        cat > "$CHNROUTE_NFT" <<EOF
-table ip clash {
-  set cn_ips {
-    type ipv4_addr;
-    flags interval;
-    elements = {
-EOF
-
-        awk '!/^#/ && NF { gsub(/\r/, ""); printf "      %s,\n", $1 }' "$CN_IP_FILE" >> "$CHNROUTE_NFT"
-        sed -i '$ s/,$//' "$CHNROUTE_NFT"
-
-        cat >> "$CHNROUTE_NFT" <<EOF
-    }
-  }
-}
-EOF
-    else
-        echo "CN bypass disabled or file not found: $CN_IP_FILE"
-        rm -f "$CHNROUTE_NFT"
-    fi
-
-    # clash.nft
-    cat > "$MAIN_NFT" <<EOF
-flush ruleset
-
-include "$PRIVATE_NFT"
-EOF
-
-    [ "$BYPASS_CN" = "true" ] && [ -f "$CN_IP_FILE" ] && echo "include \"$CHNROUTE_NFT\"" >> "$MAIN_NFT"
-
-    cat >> "$MAIN_NFT" <<EOF
-
-table ip clash {
-  chain PREROUTING {
-    type filter hook prerouting priority filter; policy accept;
-    ip daddr @reserved_ips return
-EOF
-
-    [ "$BYPASS_CN" = "true" ] && [ -f "$CN_IP_FILE" ] && echo "    ip daddr @cn_ips return" >> "$MAIN_NFT"
-
-    cat >> "$MAIN_NFT" <<EOF
-    meta mark $MIHOMO_MARK return
-    meta l4proto {tcp, udp} mark set $TPROXY_MARK tproxy to 127.0.0.1:$MIHOMO_PORT accept
-  }
-
-  chain PREROUTING_DNS {
-    type nat hook prerouting priority -100; policy accept;
-    meta mark $MIHOMO_MARK return
-    udp dport 53 redirect to :$MIHOMO_DNS_PORT
-  }
-
-  chain DIVERT {
-    type filter hook prerouting priority -150; policy accept;
-    meta l4proto tcp socket transparent 1 meta mark set $TPROXY_MARK accept
-  }
-EOF
-
-    if [ "$QUIC" = "false" ]; then
-        cat >> "$MAIN_NFT" <<EOF
-
-  chain INPUT {
-    type filter hook input priority -50;
-    udp dport 443 reject
-  }
-EOF
-    fi
-
-    if [ "$CONTAINER_PROXY" = "true" ]; then
-        cat >> "$MAIN_NFT" <<EOF
-
-  chain OUTPUT {
-    type route hook output priority -150; policy accept;
-    ip daddr @reserved_ips return
-    meta mark $MIHOMO_MARK return
-    meta l4proto {tcp, udp} mark set $TPROXY_MARK accept
-  }
-
-  chain OUTPUT_DNS {
-    type nat hook output priority -100; policy accept;
-    meta mark $MIHOMO_MARK return
-    udp dport 53 redirect to :$MIHOMO_DNS_PORT
-  }
-EOF
-    fi
-
-    echo "}" >> "$MAIN_NFT"
-
-    # Masquerade non-tproxy traffic going out of default interface
-    cat >> "$MAIN_NFT" <<EOF
-
-table ip nat {
-  chain POSTROUTING {
-    type nat hook postrouting priority 100; policy accept;
-    meta mark != $TPROXY_MARK oifname "$DEFAULT_IFACE" masquerade
-  }
-}
-EOF
-
-    nft -f "$MAIN_NFT"
-}
-
+# 校验环境变量
 if [ "$BYPASS_CN" != "true" ] && [ "$BYPASS_CN" != "false" ]; then
     echo "Error: '\$BYPASS_CN' Must be 'true' or 'false'."
     exit 1
@@ -167,16 +26,42 @@ if [ "$CONTAINER_PROXY" != "true" ] && [ "$CONTAINER_PROXY" != "false" ]; then
     exit 1
 fi
 
-# Add policy routing to packets marked as 1 delivered locally
-if ! ip rule list | grep -q "fwmark $TPROXY_MARK lookup $ROUTE_TABLE"; then
-    ip rule add fwmark $TPROXY_MARK lookup $ROUTE_TABLE
+# 路由标记
+ip rule add fwmark $TPROXY_MARK table $ROUTE_TABLE 2>/dev/null
+ip route add local 0.0.0.0/0 dev lo table $ROUTE_TABLE 2>/dev/null
+
+# 清理已有规则
+iptables -t mangle -F
+iptables -t mangle -X clash 2>/dev/null
+iptables -t mangle -N clash
+
+# 保留地址不代理
+for ip in $RESERVED_IPS; do
+    iptables -t mangle -A clash -d $ip -j RETURN
+done
+
+# 中国大陆 IP 分流
+if [ "$BYPASS_CN" = "true" ] && [ -f "$CN_IP_FILE" ]; then
+    while read -r ip; do
+        [[ "$ip" =~ ^#.*$ || -z "$ip" ]] && continue
+        iptables -t mangle -A clash -d "$ip" -j RETURN
+    done < "$CN_IP_FILE"
 fi
 
-if ! ip route show table $ROUTE_TABLE | grep -q "local default dev lo"; then
-    ip route add local default dev lo table $ROUTE_TABLE
+# 禁用 QUIC
+if [ "$QUIC" = "false" ]; then
+    iptables -t mangle -A clash -p udp --dport 443 -j DROP
 fi
 
-setup_nftables
+# TProxy 转发
+iptables -t mangle -A clash -p udp -j TPROXY --on-port $MIHOMO_PORT --tproxy-mark $TPROXY_MARK
+iptables -t mangle -A clash -p tcp -j TPROXY --on-port $MIHOMO_PORT --tproxy-mark $TPROXY_MARK
+
+# DNS 劫持
+iptables -t mangle -A PREROUTING -p udp --dport 53 -j TPROXY --on-port $MIHOMO_DNS_PORT --tproxy-mark $TPROXY_MARK
+
+# 应用 chain
+iptables -t mangle -A PREROUTING -j clash
 
 echo "*** Starting Mihomo ***"
 exec "$@"

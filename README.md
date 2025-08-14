@@ -35,25 +35,28 @@ Configure  `docker-compose.yaml` file:
 
 ```docker
 services:
-  mihomo:
-    image: mihomo:latest
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
+  mihomo-tproxy:
+    image: mihomo-tproxy-docker:main
     container_name: mihomo
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
     networks:
       mihomovlan:
-        ipv4_address: 192.168.2.2
+        ipv4_address: 192.168.31.5
     environment:
-      QUIC: "true" # allow quic (udp 443)
-      CONTAINER_PROXY: "false" # forward the container's own traffic to tproxy
-      BYPASS_CN: "false" # bypass cn ip to mihomo kernel (valid only in redir-host mode; fake-ip mode requires DNS routing)
+      - TZ=Asia/Shanghai
+      - BYPASS_CN=false
+      - QUIC=false
+      - CONTAINER_PROXY=false
+    sysctls:
+      - net.ipv4.ip_forward=1
+      # Enable IPv6
+      #- net.ipv6.conf.all.disable_ipv6=0
     volumes:
-      - './config.yaml:/mihomo/config/config.yaml'
-      - './cn_cidr.txt:/mihomo/config/cn_cidr.txt'
+      - ./mihomo_config:/mihomo/config
+    dns:
+      - 1.1.1.1
 
 networks:
   mihomovlan:
@@ -63,9 +66,9 @@ networks:
       parent: eth0 # modify this to match your network interface name
     ipam:
       config: # modify the following content to match your local network env
-        - subnet: "192.168.2.0/24"
-          ip_range: "192.168.2.64/26"
-          gateway: "192.168.2.1"
+        - subnet: "192.168.2.31/24"
+          ip_range: "192.168.31.64/26"
+          gateway: "192.168.31.1"
 ```
 
 If you need to connect to an IPv6 server, modify the networks config as follows:
@@ -79,9 +82,9 @@ networks:
     enable_ipv6: true
     ipam:
       config:
-        - subnet: "192.168.2.0/24"
-          ip_range: "192.168.2.64/26"
-          gateway: "192.168.2.1"
+        - subnet: "192.168.31.0/24"
+          ip_range: "192.168.31.64/26"
+          gateway: "192.168.31.1"
         - subnet: "2001:db8:1::/64"
 ```
 

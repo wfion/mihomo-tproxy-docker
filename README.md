@@ -15,20 +15,6 @@ By default, the gateway itself (docker container) does not forward traffic to TP
 - AMD64 or ARM64 (AArch64) based Linux devices
 - Docker and Compose V2 installed
 
-### Building
-
-Download or clone this repository to your local machine, and then build the image using the following command:
-
-```
-docker build -t mihomo:latest .
-```
-
-If you encounter network issues during the build process, try using the host network mode:
-
-```
-docker build --network=host -t mihomo:latest .
-```
-
 ## Usage
 
 Configure  `docker-compose.yaml` file:
@@ -89,6 +75,10 @@ networks:
 ```
 
 !!! Configure  `config.yaml` of mihomo before you start the container. Please refer to the comments in the configuration for modifications.
+
+```
+ip link set eth0 promisc on
+```
 
 After configuring the `config.yaml` file, to start the container:
 

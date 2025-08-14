@@ -58,7 +58,7 @@ iptables -t mangle -A clash -p udp -j TPROXY --on-port $MIHOMO_PORT --tproxy-mar
 iptables -t mangle -A clash -p tcp -j TPROXY --on-port $MIHOMO_PORT --tproxy-mark $TPROXY_MARK
 
 # DNS 劫持
-iptables -t mangle -A PREROUTING -p udp --dport 53 -j TPROXY --on-port $MIHOMO_DNS_PORT --tproxy-mark $TPROXY_MARK
+#iptables -t mangle -A PREROUTING -p udp --dport 53 -j TPROXY --on-port $MIHOMO_DNS_PORT --tproxy-mark $TPROXY_MARK
 
 # 应用 chain
 iptables -t mangle -A PREROUTING -j clash

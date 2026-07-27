@@ -15,9 +15,11 @@ services:
       QUIC: "false" # allow quic (udp 443)
       CONTAINER_PROXY: "false" # forward the container's own traffic to tproxy
       BYPASS_CN: "false" # bypass cn ip to mihomo kernel (valid only in redir-host mode; fake-ip mode requires DNS routing)
+      # CONFIG_URL: "https://example.com/mihomo.yaml" # optional; takes precedence over config.yaml
     volumes:
       - './config.yaml:/mihomo/config/config.yaml'
       - './cn_cidr.txt:/mihomo/config/cn_cidr.txt'
+      # - './override.yaml:/mihomo/config/override.yaml:ro' # optional custom rules
 
 networks:
   mihomovlan:

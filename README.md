@@ -94,6 +94,44 @@ If there are no errors, press Ctrl + C to stop the container. Then restart it in
 docker compose up -d
 ```
 
+### Configuration source and rule overrides
+
+By default, Mihomo reads the locally mounted `/mihomo/config/config.yaml`. You can instead set `CONFIG_URL` to download a complete Mihomo YAML configuration whenever the container starts:
+
+```yaml
+services:
+  mihomo:
+    environment:
+      CONFIG_URL: "https://example.com/mihomo.yaml"
+```
+
+The URL must return a complete Mihomo YAML configuration, not a Base64-encoded proxy list. When `CONFIG_URL` is set, it takes precedence over the local `config.yaml`. A download or configuration validation failure stops the container so that the Docker restart policy can retry; the container does not silently fall back to the local file or a cached copy.
+
+To add rules without editing the base configuration, copy `override.yaml.example` to `override.yaml`, edit it, and mount it into the container:
+
+```yaml
+services:
+  mihomo:
+    volumes:
+      - './override.yaml:/mihomo/config/override.yaml:ro'
+```
+
+The override file must contain only a top-level `rules` array:
+
+```yaml
+rules:
+  - DOMAIN,xxx.com,节点1
+  - DOMAIN-SUFFIX,example.org,节点1
+```
+
+These rules are inserted before the base configuration's rules, so they take priority over existing rules such as `MATCH`. Rule order is preserved and duplicate rules are not removed. The correct Mihomo rule syntax is `DOMAIN,xxx.com,节点1`, not `DOMAIN: xxx.com,'节点1'`.
+
+Both the remote configuration and `override.yaml` are read only when the container starts. Restart the container after changing either source:
+
+```shell
+docker compose restart
+```
+
 You can download the latest [CN IP list](https://github.com/misakaio/chnroutes2/blob/master/chnroutes.txt) and replace the `cn_cidr.txt` file with it (the filename cannot be changed). After updating the `config.yaml` or `cn_cidr.txt`, simply restart the Docker container for the changes to take effect:
 
 ```

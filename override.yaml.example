@@ -1,0 +1,4 @@
+# Custom rules are inserted before all rules from the base configuration.
+rules:
+  - DOMAIN,xxx.com,节点1
+  - DOMAIN-SUFFIX,example.org,节点1

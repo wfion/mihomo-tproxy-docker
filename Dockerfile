@@ -5,7 +5,7 @@ ARG TZ="Asia/Shanghai"
 WORKDIR /mihomo
 
 RUN echo "Starting..." && \
-    apk add --no-cache iptables ca-certificates tzdata git && \
+    apk add --no-cache iptables ca-certificates curl yq-go tzdata git && \
     cp /usr/share/zoneinfo/${TZ} /etc/localtime && \
     echo ${TZ} > /etc/timezone && \
     mkdir /mihomo/config && \

@@ -9,7 +9,7 @@ on:
   schedule:
     - cron: "0 0 */3 * *"
   push:
-    branches: [ "main" ]
+    branches: [ "main", "test" ]
     # Publish semver tags as releases.
     tags: [ 'v*.*.*' ]
   pull_request:
@@ -36,6 +36,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Show upstream Mihomo version
+        run: >-
+          docker run --rm --pull always --platform linux/amd64
+          --entrypoint /mihomo metacubex/mihomo:latest -v
 
       # Install the cosign tool except on PR
       # https://github.com/sigstore/cosign-installer
@@ -71,6 +76,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=tag
+            type=raw,value=main,enable=${{ github.event_name == 'schedule' }}
 
       # Build and push Docker image with Buildx (don't push on PR)
       # https://github.com/docker/build-push-action
@@ -80,7 +86,7 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

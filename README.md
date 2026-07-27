@@ -105,7 +105,17 @@ services:
       CONFIG_URL: "https://example.com/mihomo.yaml"
 ```
 
-The URL must return a complete Mihomo YAML configuration, not a Base64-encoded proxy list. When `CONFIG_URL` is set, it takes precedence over the local `config.yaml`. A download or configuration validation failure stops the container so that the Docker restart policy can retry; the container does not silently fall back to the local file or a cached copy.
+The request uses `User-Agent: clash.meta` by default so subscription services that select an output format from this header return a complete Mihomo-compatible YAML configuration. Set `CONFIG_USER_AGENT` to override it when required by your provider:
+
+```yaml
+services:
+  mihomo:
+    environment:
+      CONFIG_URL: "https://example.com/subscription"
+      CONFIG_USER_AGENT: "clash.meta"
+```
+
+The response must be a complete Mihomo YAML configuration, not a Base64-encoded proxy list. When `CONFIG_URL` is set, it takes precedence over the local `config.yaml`. A download or configuration validation failure stops the container so that the Docker restart policy can retry; the container does not silently fall back to the local file or a cached copy.
 
 To add rules without editing the base configuration, copy `override.yaml.example` to `override.yaml`, edit it, and mount it into the container:
 

@@ -31,6 +31,7 @@ prepare_config() {
         echo "*** Downloading Mihomo configuration ***"
         if ! curl --fail --location --silent --show-error \
             --connect-timeout 15 --max-time 60 --retry 2 \
+            --user-agent "${CONFIG_USER_AGENT:-clash.meta}" \
             --output "$download_file" "$CONFIG_URL"; then
             fail "Failed to download the Mihomo configuration."
         fi

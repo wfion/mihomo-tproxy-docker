@@ -25,7 +25,10 @@ prepare_config() {
     effective_config="$LOCAL_CONFIG_FILE"
     generated_config="false"
 
-    if [ -n "${CONFIG_URL:-}" ]; then
+    if [ -n "${CONFIG_URL:-}" ] && [ -f "$LOCAL_CONFIG_FILE" ]; then
+        echo "*** Using local Mihomo configuration while remote configuration updates in background ***"
+        return
+    elif [ -n "${CONFIG_URL:-}" ]; then
         mkdir -p "$RUNTIME_CONFIG_DIR"
         download_file="$RUNTIME_CONFIG_DIR/config.download"
         echo "*** Downloading Mihomo configuration ***"
@@ -84,6 +87,30 @@ prepare_config() {
     else
         MIHOMO_CONFIG_FILE=""
     fi
+}
+
+update_config_in_background() {
+    [ -n "${CONFIG_URL:-}" ] || return 0
+    [ -f "$LOCAL_CONFIG_FILE" ] || return 0
+    (
+        sleep "${CONFIG_UPDATE_DELAY:-30}"
+        update_file="$RUNTIME_CONFIG_DIR/config.update"
+        mkdir -p "$RUNTIME_CONFIG_DIR"
+        echo "*** Updating Mihomo configuration in background ***"
+        if curl --fail --location --silent --show-error \
+            --connect-timeout 15 --max-time 60 --retry 2 \
+            --user-agent "${CONFIG_USER_AGENT:-clash.meta}" \
+            --output "$update_file" "$CONFIG_URL" && [ -s "$update_file" ] && \
+            /mihomo/mihomo -t -d /mihomo/config -f "$update_file" >/dev/null 2>&1; then
+            cp "$update_file" "${LOCAL_CONFIG_FILE}.new" &&
+            mv "${LOCAL_CONFIG_FILE}.new" "$LOCAL_CONFIG_FILE"
+            echo "*** Mihomo configuration updated; reloading ***"
+            kill -HUP "$mihomo_pid" 2>/dev/null || true
+        else
+            echo "Warning: background Mihomo configuration update failed." >&2
+            rm -f "$update_file"
+        fi
+    ) &
 }
 
 # 校验环境变量
@@ -148,4 +175,11 @@ echo "*** Starting Mihomo ***"
 if [ -n "$MIHOMO_CONFIG_FILE" ] && [ "${1:-}" = "/mihomo/mihomo" ]; then
     set -- "$@" -f "$MIHOMO_CONFIG_FILE"
 fi
-exec "$@"
+if [ -n "${CONFIG_URL:-}" ] && [ -f "$LOCAL_CONFIG_FILE" ]; then
+    "$@" &
+    mihomo_pid=$!
+    update_config_in_background
+    wait "$mihomo_pid"
+else
+    exec "$@"
+fi

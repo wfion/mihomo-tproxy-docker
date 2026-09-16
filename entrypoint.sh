@@ -29,7 +29,7 @@ prepare_config() {
         mkdir -p "$RUNTIME_CONFIG_DIR"
         download_file="$RUNTIME_CONFIG_DIR/config.download"
         echo "*** Downloading Mihomo configuration ***"
-        if ! curl --fail --location --silent --show-error \
+        if ! curl --noproxy "*" --fail --location --silent --show-error \
             --connect-timeout 15 --max-time 60 --retry 2 \
             --user-agent "${CONFIG_USER_AGENT:-clash.meta}" \
             --output "$download_file" "$CONFIG_URL"; then
